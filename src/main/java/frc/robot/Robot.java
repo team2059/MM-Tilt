@@ -64,18 +64,18 @@ package frc.robot;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-import edu.wpi.first.wpilibj.Joystick;
 
 import com.ctre.phoenix.motorcontrol.can.*;
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.FeedbackDevice;
+import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.StatusFrameEnhanced;
 
 public class Robot extends TimedRobot {
 
 	// setpoints in encoder ticks
-	double targetMin = 0;
-	double targetMax = 0;
+	double targetMin = -1028;
+	double targetMax = 12326 ;
 
 	/* Hardware */
 	WPI_TalonSRX _talon = new WPI_TalonSRX(5);
@@ -106,7 +106,8 @@ public class Robot extends TimedRobot {
 
 		/* Factory default hardware to prevent unexpected behavior */
 		_talon.configFactoryDefault();
-		//_talon.setSelectedSensorPosition(0);
+	//	_talon.setNeutralMode(NeutralMode.Brake);
+		// _talon.setSelectedSensorPosition(0);
 
 		/* Configure Sensor Source for Pirmary PID */
 		_talon.configSelectedFeedbackSensor(FeedbackDevice.QuadEncoder, Constants.kPIDLoopIdx,
@@ -123,7 +124,7 @@ public class Robot extends TimedRobot {
 		 * have green LEDs when driving Talon Forward / Requesting Postiive Output Phase
 		 * sensor to have positive increment when driving Talon Forward (Green LED)
 		 */
-		_talon.setSensorPhase(true);
+		_talon.setSensorPhase(false);
 		_talon.setInverted(false);
 
 		/* Set relevant frame periods to be at least as fast as periodic rate */
@@ -144,8 +145,8 @@ public class Robot extends TimedRobot {
 		_talon.config_kD(Constants.kSlotIdx, Constants.kGains.kD, Constants.kTimeoutMs);
 
 		/* Set acceleration and vcruise velocity - see documentation */
-		_talon.configMotionCruiseVelocity(0, Constants.kTimeoutMs);
-		_talon.configMotionAcceleration(0, Constants.kTimeoutMs);
+		_talon.configMotionCruiseVelocity(973, Constants.kTimeoutMs);
+		_talon.configMotionAcceleration(972.75, Constants.kTimeoutMs);
 
 		_talon.configFeedbackNotContinuous(true, Constants.kTimeoutMs);
 
@@ -196,40 +197,44 @@ public class Robot extends TimedRobot {
 		 * can
 		 * be used to confirm hardware setup.
 		 */
-		if (logitech.getRawButton(5)) {
+
+		// A
+		if (logitech.getRawButton(2)) {
 			/* Motion Magic */
 
 			/* 4096 ticks/rev * 10 Rotations in either direction */
-			double targetPos = rightYstick
-					* 4096 * 10.0;
-			_talon.set(ControlMode.MotionMagic, targetPos);
+			// double targetPos = targetMin;
+			// * 4096 * 10.0;
+			_talon.set(ControlMode.MotionMagic, targetMin);
 
 			/* Append more signals to print when in speed mode */
 			_sb.append("\terr:");
 			_sb.append(_talon.getClosedLoopError(Constants.kPIDLoopIdx));
 			_sb.append("\ttrg:");
-			_sb.append(targetPos);
-		} else if (logitech.getRawButton(3)) {
+			_sb.append(targetMin);
+
+			// Y
+		} else if (logitech.getRawButton(4)) {
 			/* Motion Magic */
 
 			/* 4096 ticks/rev * 10 Rotations in either direction */
-			double targetPos = leftYstick * 4096 * -10.0;
-			_talon.set(ControlMode.MotionMagic, targetPos);
+			// double targetPos = targetMax; //* 4096 * -10.0;
+			_talon.set(ControlMode.MotionMagic, targetMax);
 
 			/* Append more signals to print when in speed mode */
 			_sb.append("\terr:");
 			_sb.append(_talon.getClosedLoopError(Constants.kPIDLoopIdx));
 			_sb.append("\ttrg:");
-			_sb.append(targetPos);
+			_sb.append(targetMax);
 		} else {
 			/* Percent Output */
 
 			_talon.set(ControlMode.PercentOutput, leftYstick);
 		}
-		if (logitech.getRawButton(2)) {
-			/* Zero sensor positions */
-			_talon.setSelectedSensorPosition(0);
-		}
+		// if (logitech.getRawButton(2)) {
+		// /* Zero sensor positions */
+		// _talon.setSelectedSensorPosition(0);
+		// }
 
 		int pov = logitech.getPOV();
 		if (_pov == pov) {
