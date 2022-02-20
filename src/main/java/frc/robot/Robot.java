@@ -1,3 +1,4 @@
+
 /**
  * Phoenix Software License Agreement
  *
@@ -63,26 +64,37 @@ package frc.robot;
 
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.simulation.XboxControllerSim;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import com.ctre.phoenix.motorcontrol.can.*;
+
+import java.util.ResourceBundle.Control;
+
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.FeedbackDevice;
+import com.ctre.phoenix.motorcontrol.FollowerType;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.StatusFrameEnhanced;
 
 public class Robot extends TimedRobot {
 
 	// setpoints in encoder ticks
-	double targetMin = -1028;
-	double targetMax = 12326 ;
+	double masterTargetMin = 50;
+	double masterTargetMax = 500;
+
+	double followerTargetMin = 50;
+	double followerTargetMax = 500;
 
 	/* Hardware */
-	WPI_TalonSRX _talon = new WPI_TalonSRX(5);
+
+	WPI_TalonSRX followTalon = new WPI_TalonSRX(12);
+	WPI_TalonSRX masterTalon = new WPI_TalonSRX(11);
+
 	XboxController logitech = new XboxController(3);
 
 	/* create some followers */
-	BaseMotorController _follower1 = new WPI_TalonSRX(0);
+	// BaseMotorController _follower1 = new WPI_TalonSRX(0);
 	// BaseMotorController _follower2 = new WPI_VictorSPX(0);
 	// BaseMotorController _follower3 = new WPI_VictorSPX(1);
 
@@ -96,79 +108,115 @@ public class Robot extends TimedRobot {
 	int _pov = -1;
 
 	public void robotInit() {
-		/* setup some followers */
-		_follower1.configFactoryDefault();
-		// _follower2.configFactoryDefault();
-		// _follower3.configFactoryDefault();
-		_follower1.follow(_talon);
-		// _follower2.follow(_talon);
-		// _follower3.follow(_talon);
+		/* Zero the sensor once on robot boot up */
+		followTalon.setSelectedSensorPosition(0, Constants.kPIDLoopIdx,
+				Constants.kTimeoutMs);
+		/* Zero the sensor once on robot boot up */
+		masterTalon.setSelectedSensorPosition(0, Constants.kPIDLoopIdx,
+				Constants.kTimeoutMs);
 
 		/* Factory default hardware to prevent unexpected behavior */
-		_talon.configFactoryDefault();
-	//	_talon.setNeutralMode(NeutralMode.Brake);
+		masterTalon.configFactoryDefault();
+		followTalon.configFactoryDefault();
+
+		// followTalon.follow(masterTalon, FollowerType.AuxOutput1);
+		// _talon.setNeutralMode(NeutralMode.Brake);
 		// _talon.setSelectedSensorPosition(0);
 
 		/* Configure Sensor Source for Pirmary PID */
-		_talon.configSelectedFeedbackSensor(FeedbackDevice.QuadEncoder, Constants.kPIDLoopIdx,
+		masterTalon.configSelectedFeedbackSensor(FeedbackDevice.QuadEncoder, Constants.kPIDLoopIdx,
 				Constants.kTimeoutMs);
 
-		/*
-		 * set deadband to super small 0.001 (0.1 %).
-		 * The default deadband is 0.04 (4 %)
-		 */
-		_talon.configNeutralDeadband(0.001, Constants.kTimeoutMs);
+		masterTalon.configNeutralDeadband(0.001, Constants.kTimeoutMs);
 
-		/**
-		 * Configure Talon SRX Output and Sensor direction accordingly Invert Motor to
-		 * have green LEDs when driving Talon Forward / Requesting Postiive Output Phase
-		 * sensor to have positive increment when driving Talon Forward (Green LED)
-		 */
-		_talon.setSensorPhase(false);
-		_talon.setInverted(false);
+		// talon 12 settings
+		followTalon.setSensorPhase(false);
+		followTalon.setInverted(false);
+
+		// talon 11 settings
+		masterTalon.setSensorPhase(true);
+		masterTalon.setInverted(false);
+
+		followTalon.setNeutralMode(NeutralMode.Brake);
+		masterTalon.setNeutralMode(NeutralMode.Brake);
 
 		/* Set relevant frame periods to be at least as fast as periodic rate */
-		_talon.setStatusFramePeriod(StatusFrameEnhanced.Status_13_Base_PIDF0, 10, Constants.kTimeoutMs);
-		_talon.setStatusFramePeriod(StatusFrameEnhanced.Status_10_MotionMagic, 10, Constants.kTimeoutMs);
+		masterTalon.setStatusFramePeriod(StatusFrameEnhanced.Status_13_Base_PIDF0, 10, Constants.kTimeoutMs);
+		masterTalon.setStatusFramePeriod(StatusFrameEnhanced.Status_10_MotionMagic, 10, Constants.kTimeoutMs);
 
 		/* Set the peak and nominal outputs */
-		_talon.configNominalOutputForward(0, Constants.kTimeoutMs);
-		_talon.configNominalOutputReverse(0, Constants.kTimeoutMs);
-		_talon.configPeakOutputForward(1, Constants.kTimeoutMs);
-		_talon.configPeakOutputReverse(-1, Constants.kTimeoutMs);
+		masterTalon.configNominalOutputForward(0, Constants.kTimeoutMs);
+		masterTalon.configNominalOutputReverse(0, Constants.kTimeoutMs);
+		masterTalon.configPeakOutputForward(1, Constants.kTimeoutMs);
+		masterTalon.configPeakOutputReverse(-1, Constants.kTimeoutMs);
 
 		/* Set Motion Magic gains in slot0 - see documentation */
-		_talon.selectProfileSlot(Constants.kSlotIdx, Constants.kPIDLoopIdx);
-		_talon.config_kF(Constants.kSlotIdx, Constants.kGains.kF, Constants.kTimeoutMs);
-		_talon.config_kP(Constants.kSlotIdx, Constants.kGains.kP, Constants.kTimeoutMs);
-		_talon.config_kI(Constants.kSlotIdx, Constants.kGains.kI, Constants.kTimeoutMs);
-		_talon.config_kD(Constants.kSlotIdx, Constants.kGains.kD, Constants.kTimeoutMs);
+		masterTalon.selectProfileSlot(Constants.kSlotIdx, Constants.kPIDLoopIdx);
+		masterTalon.config_kF(Constants.kSlotIdx, Constants.masterGains.kF, Constants.kTimeoutMs);
+		masterTalon.config_kP(Constants.kSlotIdx, Constants.masterGains.kP, Constants.kTimeoutMs);
+		masterTalon.config_kI(Constants.kSlotIdx, Constants.masterGains.kI, Constants.kTimeoutMs);
+		masterTalon.config_kD(Constants.kSlotIdx, Constants.masterGains.kD, Constants.kTimeoutMs);
 
 		/* Set acceleration and vcruise velocity - see documentation */
-		_talon.configMotionCruiseVelocity(973, Constants.kTimeoutMs);
-		_talon.configMotionAcceleration(972.75, Constants.kTimeoutMs);
+		masterTalon.configMotionCruiseVelocity(148, Constants.kTimeoutMs);
+		masterTalon.configMotionAcceleration(147.6, Constants.kTimeoutMs);
 
-		_talon.configFeedbackNotContinuous(true, Constants.kTimeoutMs);
+		masterTalon.configFeedbackNotContinuous(true, Constants.kTimeoutMs);
 
 		/* Zero the sensor once on robot boot up */
-		// _talon.setSelectedSensorPosition(0, Constants.kPIDLoopIdx,
-		// Constants.kTimeoutMs);
+		masterTalon.setSelectedSensorPosition(0, Constants.kPIDLoopIdx,
+				Constants.kTimeoutMs);
 
 		// Configure current limits
-		_talon.configPeakCurrentLimit(30);
-		_talon.configPeakCurrentDuration(150);
+		masterTalon.configPeakCurrentLimit(30);
+		masterTalon.configPeakCurrentDuration(150);
 
 		// takes in AMPS
-		_talon.configContinuousCurrentLimit(20);
+		masterTalon.configContinuousCurrentLimit(20);
 
 		// integral zone
-		_talon.config_IntegralZone(Constants.kSlotIdx, 3);
+		masterTalon.config_IntegralZone(Constants.kSlotIdx, 3);
+
+		/* Set relevant frame periods to be at least as fast as periodic rate */
+		followTalon.setStatusFramePeriod(StatusFrameEnhanced.Status_13_Base_PIDF0, 10, Constants.kTimeoutMs);
+		followTalon.setStatusFramePeriod(StatusFrameEnhanced.Status_10_MotionMagic, 10, Constants.kTimeoutMs);
+
+		/* Set the peak and nominal outputs */
+		followTalon.configNominalOutputForward(0, Constants.kTimeoutMs);
+		followTalon.configNominalOutputReverse(0, Constants.kTimeoutMs);
+		followTalon.configPeakOutputForward(1, Constants.kTimeoutMs);
+		followTalon.configPeakOutputReverse(-1, Constants.kTimeoutMs);
+
+		/* Set Motion Magic gains in slot0 - see documentation */
+		followTalon.selectProfileSlot(Constants.kSlotIdx, Constants.kPIDLoopIdx);
+		followTalon.config_kF(Constants.kSlotIdx, Constants.followerGains.kF, Constants.kTimeoutMs);
+		followTalon.config_kP(Constants.kSlotIdx, Constants.followerGains.kP, Constants.kTimeoutMs);
+		followTalon.config_kI(Constants.kSlotIdx, Constants.followerGains.kI, Constants.kTimeoutMs);
+		followTalon.config_kD(Constants.kSlotIdx, Constants.followerGains.kD, Constants.kTimeoutMs);
+
+		/* Set acceleration and vcruise velocity - see documentation */
+		followTalon.configMotionCruiseVelocity(148, Constants.kTimeoutMs);
+		followTalon.configMotionAcceleration(147.6, Constants.kTimeoutMs);
+
+		followTalon.configFeedbackNotContinuous(true, Constants.kTimeoutMs);
+
+		// Configure current limits
+		followTalon.configPeakCurrentLimit(30);
+		followTalon.configPeakCurrentDuration(150);
+
+		// takes in AMPS
+		followTalon.configContinuousCurrentLimit(20);
+
+		// integral zone
+		followTalon.config_IntegralZone(Constants.kSlotIdx, 3);
+
 	}
 
 	/**
 	 * This function is called periodically during operator control
 	 */
 	public void teleopPeriodic() {
+		SmartDashboard.putString("talon mode", masterTalon.getControlMode().toString());
 		/* Get gamepad axis - forward stick is positive */
 		double leftYstick = -1.0 * logitech.getLeftY(); /* left-side Y for Xbox360Gamepad */
 		double rightYstick = -1.0 * logitech.getRightY(); /* right-side Y for Xbox360Gamepad */
@@ -180,17 +228,17 @@ public class Robot extends TimedRobot {
 		} /* deadband 10% */
 
 		/* Get current Talon SRX motor output */
-		double motorOutput = _talon.getMotorOutputPercent();
+		double motorOutput = masterTalon.getMotorOutputPercent();
 
 		/* Prepare line to print */
 		_sb.append("\tOut%:");
 		_sb.append(motorOutput);
 		_sb.append("\tVel:");
-		_sb.append(_talon.getSelectedSensorVelocity(Constants.kPIDLoopIdx));
+		_sb.append(masterTalon.getSelectedSensorVelocity(Constants.kPIDLoopIdx));
 
 		_sb.append("\t Position:");
-		_sb.append(_talon.getSelectedSensorPosition(0));
-		SmartDashboard.putNumber("Lift position", _talon.getSelectedSensorPosition());
+		_sb.append(masterTalon.getSelectedSensorPosition(0));
+		SmartDashboard.putNumber("Lift position", masterTalon.getSelectedSensorPosition());
 
 		/**
 		 * Perform Motion Magic when Button 1 is held, else run Percent Output, which
@@ -199,19 +247,21 @@ public class Robot extends TimedRobot {
 		 */
 
 		// A
-		if (logitech.getRawButton(2)) {
+
+		if (logitech.getRawButton(1)) {
 			/* Motion Magic */
 
 			/* 4096 ticks/rev * 10 Rotations in either direction */
 			// double targetPos = targetMin;
 			// * 4096 * 10.0;
-			_talon.set(ControlMode.MotionMagic, targetMin);
+			masterTalon.set(ControlMode.MotionMagic, masterTargetMin);
+			followTalon.set(ControlMode.MotionMagic, followerTargetMin);
 
 			/* Append more signals to print when in speed mode */
 			_sb.append("\terr:");
-			_sb.append(_talon.getClosedLoopError(Constants.kPIDLoopIdx));
+			_sb.append(masterTalon.getClosedLoopError(Constants.kPIDLoopIdx));
 			_sb.append("\ttrg:");
-			_sb.append(targetMin);
+			_sb.append(masterTargetMin);
 
 			// Y
 		} else if (logitech.getRawButton(4)) {
@@ -219,17 +269,23 @@ public class Robot extends TimedRobot {
 
 			/* 4096 ticks/rev * 10 Rotations in either direction */
 			// double targetPos = targetMax; //* 4096 * -10.0;
-			_talon.set(ControlMode.MotionMagic, targetMax);
+			masterTalon.set(ControlMode.MotionMagic, masterTargetMax);
+			followTalon.set(ControlMode.MotionMagic, followerTargetMax);
 
 			/* Append more signals to print when in speed mode */
 			_sb.append("\terr:");
-			_sb.append(_talon.getClosedLoopError(Constants.kPIDLoopIdx));
+			_sb.append(masterTalon.getClosedLoopError(Constants.kPIDLoopIdx));
 			_sb.append("\ttrg:");
-			_sb.append(targetMax);
+			_sb.append(masterTargetMin);
+
 		} else {
 			/* Percent Output */
 
-			_talon.set(ControlMode.PercentOutput, leftYstick);
+			masterTalon.set(ControlMode.PercentOutput, leftYstick * 0.25);
+			followTalon.set(ControlMode.PercentOutput, rightYstick * 0.25);
+
+			masterTalon.setNeutralMode(NeutralMode.Brake);
+			followTalon.setNeutralMode(NeutralMode.Brake);
 		}
 		// if (logitech.getRawButton(2)) {
 		// /* Zero sensor positions */
@@ -244,7 +300,7 @@ public class Robot extends TimedRobot {
 			_smoothing--;
 			if (_smoothing < 0)
 				_smoothing = 0;
-			_talon.configMotionSCurveStrength(_smoothing);
+			masterTalon.configMotionSCurveStrength(_smoothing);
 
 			System.out.println("Smoothing is set to: " + _smoothing);
 		} else if (_pov == 0) { // D-Pad up
@@ -252,14 +308,14 @@ public class Robot extends TimedRobot {
 			_smoothing++;
 			if (_smoothing > 8)
 				_smoothing = 8;
-			_talon.configMotionSCurveStrength(_smoothing);
+			masterTalon.configMotionSCurveStrength(_smoothing);
 
 			System.out.println("Smoothing is set to: " + _smoothing);
 		}
 		_pov = pov; /* save the pov value for next time */
 
 		/* Instrumentation */
-		Instrum.Process(_talon, _sb);
+		Instrum.Process(masterTalon, _sb);
 	}
 
 }
